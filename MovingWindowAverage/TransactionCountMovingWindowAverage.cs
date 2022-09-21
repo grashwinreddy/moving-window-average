@@ -79,8 +79,8 @@ namespace MovingWindowAverage
             DateTime endTimeOfTransactionBlockToBeExcluded = _transactionCountDataOfCurrentWindow.EndDate;
             var transactionCountDataOfBlockToBeExcluded = _transactionDataProvider.GetTransactionCount(startTimeOfTransactionBlockToBeExcluded, endTimeOfTransactionBlockToBeExcluded);
 
-            DateTime startTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate.AddSeconds(-WindowMovementTimeInSeconds());
-            DateTime endTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate;
+            DateTime startTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate;
+            DateTime endTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate.AddSeconds(WindowMovementTimeInSeconds());
             var transactionCountDataOfBlockToBeIncluded = _transactionDataProvider.GetTransactionCount(startTimeOfTransactionBlockToBeIncluded, endTimeOfTransactionBlockToBeIncluded);
 
             _transactionCountDataOfCurrentWindow.Count = _transactionCountDataOfCurrentWindow.Count - transactionCountDataOfBlockToBeExcluded.Count + transactionCountDataOfBlockToBeIncluded.Count;
