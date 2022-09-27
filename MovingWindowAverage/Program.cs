@@ -4,8 +4,9 @@ try
 {
     //Moving average example for fixed count. 
     Console.WriteLine("\n");
-    var start1 = DateTime.Now.AddDays(-2);
+    var start1 = DateTime.Now.AddDays(-3);
     var end1 = DateTime.Now.AddDays(-1);
+    Console.WriteLine($"Calculating moving averages transactions per hour in a day window");
     Console.WriteLine($"Calculating moving averages of transaction Count between {start1} and {end1}. The data provider used generates fixed transaction count of 300");
     ITransactionDataProvider dataProvider1 = new FixedTransactionDataProvider();
     var movingAverageCalculator1 = new TransactionCountMovingWindowAverage(Window.Day, Frequency.Hour, dataProvider1);
@@ -22,6 +23,7 @@ try
     var movingAverageCalculator = new TransactionCountMovingWindowAverage(Window.Hour, Frequency.Minute, dataProvider);
     var pastAvergaes = movingAverageCalculator.GetAllAverages(start,end);
     Console.WriteLine("\n");
+    Console.WriteLine($"Calculating moving averages transactions per minute in a hour window");
     Console.WriteLine($"Calculating moving averages of transaction Count between {start} and {end}. The data provider used generates a random transaction count between 250 to 301");
     foreach (var item in pastAvergaes)
     {
