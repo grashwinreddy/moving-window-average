@@ -25,68 +25,114 @@ namespace MovingWindowAverage
             _window = window;
             _frequency = frequency;
             _windowBlocksCount = GetWindowBlockCount(_window, _frequency);
-            (DateTime start, DateTime end) initialWindowDates = GetInitialDates();
+            (DateTime start, DateTime end) initialWindowDates = GetInitialWindowDates();
             _transactionCountDataOfCurrentWindow = transactionDataProvider.GetTransactionCount(initialWindowDates.start, initialWindowDates.end);
-            ScheduleWindowMovement();
+            ScheduleLiveWindowMovement();
         }
 
-
-        public double GetLatestAverage()
+        /// <summary>
+        /// The method returns moving window average of live window. 
+        /// As soon as TransactionCountMovingWindowAverage is initialized, program starts calaculating moving average from time strated. 
+        /// Calculates the average at selected frequency for selected window size
+        /// </summary>
+        /// <returns></returns>
+        public AverageResponse GetLiveAverage()
         {
-            return (double)_transactionCountDataOfCurrentWindow.Count / _windowBlocksCount;
+            var average =  (double)_transactionCountDataOfCurrentWindow.Count / _windowBlocksCount;
+            return new AverageResponse() { WindowStartTime = _transactionCountDataOfCurrentWindow.StartDate, WindowEndTime = _transactionCountDataOfCurrentWindow.EndDate, Average=average };
+
         }
 
-        private void ScheduleWindowMovement()
+        /// <summary>
+        /// Gets moving window averages between specified time
+        /// Calculates the average at selected frequency for selected window size
+        /// </summary>
+        /// <param name="startDate"></param>
+        /// <param name="endDate"></param>
+        /// <returns></returns>
+        public List<AverageResponse> GetAllAverages(DateTime startDate, DateTime endDate)
+        {
+            List<AverageResponse> averages = new List<AverageResponse>();
+            (DateTime start, DateTime end) initialWindowDates = GetInitialWindowDates(startDate);
+            var currentWindowTransactionData = _transactionDataProvider.GetTransactionCount(initialWindowDates.start, initialWindowDates.end);
+            var initialAverage = (double)currentWindowTransactionData.Count / _windowBlocksCount;
+            averages.Add(new AverageResponse() { WindowStartTime= currentWindowTransactionData.StartDate, WindowEndTime = currentWindowTransactionData.EndDate, Average= initialAverage});
+            do
+            {
+                var currentWindowTransactionDataAfterMove = MoveWindow(currentWindowTransactionData.EndDate, currentWindowTransactionData.Count);
+                currentWindowTransactionData.EndDate = currentWindowTransactionDataAfterMove.currentWindowEndDate;
+                currentWindowTransactionData.StartDate = currentWindowTransactionDataAfterMove.currentWindowStartDate;
+                currentWindowTransactionData.Count = currentWindowTransactionDataAfterMove.currentWindowCount;
+                var average = (double)currentWindowTransactionData.Count / _windowBlocksCount;
+                averages.Add(new AverageResponse() { WindowStartTime = currentWindowTransactionData.StartDate, WindowEndTime = currentWindowTransactionData.EndDate, Average = average });
+            } while (currentWindowTransactionData.EndDate <= endDate);
+            return averages;
+        }
+
+        /// <summary>
+        /// This method initializes the timer that moves window for live data
+        /// </summary>
+        private void ScheduleLiveWindowMovement()
         {
             timer = new System.Timers.Timer(WindowMovementTimeInSeconds() * 1000);
             // Hook up the Elapsed event for the timer. 
-            timer.Elapsed += MoveWindow;
+            timer.Elapsed += MoveLiveWindow;
             timer.AutoReset = true;
             timer.Enabled = true;
         }
-        private (DateTime start, DateTime end) GetInitialDates()
+        private (DateTime start, DateTime end) GetInitialWindowDates(DateTime? start = null)
         {
-            DateTime start = DateTime.Now;
+            start = start.HasValue? start: DateTime.Now;
             DateTime end = DateTime.Now;
             switch (this._window)
             {
                 case Window.Hour:
-                    end = start.AddHours(1);
+                    end = start.Value.AddHours(1);
                     break;
                 case Window.Day:
-                    end = start.AddDays(1);
+                    end = start.Value.AddDays(1);
                     break;
                 case Window.Week:
-                    end = start.AddDays(7);
+                    end = start.Value.AddDays(7);
                     break;
                 case Window.Month:
-                    end = start.AddMonths(1);
+                    end = start.Value.AddMonths(1);
                     break;
                 case Window.Year:
-                    end = start.AddYears(1);
+                    end = start.Value.AddYears(1);
                     break;
                 case Window.Custom:
                     break;
                 default:
                     break;
             }
-            return (start, end);
+            return (start.Value, end);
         }
 
-        private void MoveWindow(Object source, ElapsedEventArgs e)
+        private void MoveLiveWindow(Object source, ElapsedEventArgs e)
         {
-            DateTime startTimeOfTransactionBlockToBeExcluded = _transactionCountDataOfCurrentWindow.EndDate.AddSeconds(-WindowMovementTimeInSeconds());
-            DateTime endTimeOfTransactionBlockToBeExcluded = _transactionCountDataOfCurrentWindow.EndDate;
+            var currentWindowData = MoveWindow(_transactionCountDataOfCurrentWindow.EndDate, _transactionCountDataOfCurrentWindow.Count);
+
+            //Assign values of current window after move to Live window
+            _transactionCountDataOfCurrentWindow.Count = currentWindowData.currentWindowCount;
+            _transactionCountDataOfCurrentWindow.StartDate = currentWindowData.currentWindowStartDate;
+            _transactionCountDataOfCurrentWindow.EndDate = currentWindowData.currentWindowEndDate;
+
+        }
+        private (DateTime currentWindowStartDate, DateTime currentWindowEndDate, int currentWindowCount) MoveWindow(DateTime currentWindowEndDate, int currentWindowCount)
+        {
+            DateTime startTimeOfTransactionBlockToBeExcluded = currentWindowEndDate.AddSeconds(-WindowMovementTimeInSeconds());
+            DateTime endTimeOfTransactionBlockToBeExcluded = currentWindowEndDate;
             var transactionCountDataOfBlockToBeExcluded = _transactionDataProvider.GetTransactionCount(startTimeOfTransactionBlockToBeExcluded, endTimeOfTransactionBlockToBeExcluded);
 
-            DateTime startTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate;
-            DateTime endTimeOfTransactionBlockToBeIncluded = _transactionCountDataOfCurrentWindow.EndDate.AddSeconds(WindowMovementTimeInSeconds());
+            DateTime startTimeOfTransactionBlockToBeIncluded = currentWindowEndDate;
+            DateTime endTimeOfTransactionBlockToBeIncluded = currentWindowEndDate.AddSeconds(WindowMovementTimeInSeconds());
             var transactionCountDataOfBlockToBeIncluded = _transactionDataProvider.GetTransactionCount(startTimeOfTransactionBlockToBeIncluded, endTimeOfTransactionBlockToBeIncluded);
 
-            _transactionCountDataOfCurrentWindow.Count = _transactionCountDataOfCurrentWindow.Count - transactionCountDataOfBlockToBeExcluded.Count + transactionCountDataOfBlockToBeIncluded.Count;
-            _transactionCountDataOfCurrentWindow.StartDate = _transactionCountDataOfCurrentWindow.StartDate.AddSeconds(WindowMovementTimeInSeconds());
-            _transactionCountDataOfCurrentWindow.EndDate = _transactionCountDataOfCurrentWindow.EndDate.AddSeconds(WindowMovementTimeInSeconds());
-
+            var currentWindowCountAfterMove = currentWindowCount - transactionCountDataOfBlockToBeExcluded.Count + transactionCountDataOfBlockToBeIncluded.Count;
+            var currentWindowStartDateAfterMove = currentWindowEndDate;
+            var currentWindowEndDateAfterMove = currentWindowEndDate.AddSeconds(WindowMovementTimeInSeconds());
+            return (currentWindowStartDateAfterMove, currentWindowEndDateAfterMove, currentWindowCountAfterMove);
         }
 
         private int WindowMovementTimeInSeconds()
@@ -107,7 +153,7 @@ namespace MovingWindowAverage
                     response = 60 * 60 * 24 * GetDaysInMonth();
                     break;
                 case Frequency.Year:
-                    response = 60 * 60 * 24 * GetDaysInMonth()*12;
+                    response = 60 * 60 * 24 * GetDaysInMonth() * 12;
                     break;
                 default:
                     throw new ApplicationException();
